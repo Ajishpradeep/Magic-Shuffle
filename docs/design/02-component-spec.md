@@ -1,4 +1,4 @@
-# Sonicstride — Component Spec
+# Magic Shuffle — Component Spec
 
 > Component-by-component mapping from the prototype to what the engineer should build.
 
@@ -6,8 +6,8 @@
 
 ```
 index.html         — all global CSS + script tags
-data.jsx           — USER, CONTEXTS, MISSIONS, TRACKS  (window.SONIC_DATA)
-engine.jsx         — recommend(), deriveState(), selectMission()  (window.SONIC_ENGINE)
+data.jsx           — USER, CONTEXTS, MISSIONS, TRACKS  (window.MAGIC_SHUFFLE_DATA)
+engine.jsx         — recommend(), deriveState(), selectMission()  (window.MAGIC_SHUFFLE_ENGINE)
 art.jsx            — AlbumArt, AmbientField (canvas)
 components.jsx     — Icon, VibeTile, LedNumber, TickScale, Sparkline, StatTile,
                      DotsScale, WeatherTile, MissionTile, UpNextTile

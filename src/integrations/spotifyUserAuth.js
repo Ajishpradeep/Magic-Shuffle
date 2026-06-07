@@ -1,10 +1,7 @@
 /**
- * Spotify USER auth + playback (Phase 2). Separate from src/spotify.js, which uses
- * app-only Client Credentials for grounding picks. In-browser full-track playback
- * needs a USER token (Authorization Code flow) with the `streaming` scope and a
- * Spotify Premium account. The client secret stays here, server-side.
- *
- * Single-user in-memory token store (fine for a localhost personal app).
+ * Spotify user OAuth and Web Playback (Authorization Code + refresh).
+ * Complements `spotifyClient.js`, which uses client credentials only for search/verify.
+ * Client secret stays server-side; tokens are in-memory (single-user local demo).
  */
 import crypto from 'node:crypto';
 

@@ -1,22 +1,19 @@
 /**
- * Recommendation pipeline. AI-FIRST:
- *   1. The AI DJ reasons about the moment -> target sound profile + real songs.
- *   2. We verify each song on Spotify (real art / uri / link).
- *   3. Assemble the response.
- * Only if the AI or Spotify genuinely fail do we drop to the deterministic
- * local-catalog engine, so the app never hard-fails.
+ * Recommendation pipeline (AI-first, then deterministic catalog fallback).
+ * 1. OpenAI plans tracks + DJ copy from the full listener context.
+ * 2. Spotify client-credentials search grounds proposals in real metadata.
+ * 3. On failure, local catalog + scoring keeps the app usable offline.
  */
-import { djReason, aiEnabled, aiModel, missionLabel } from './ai.js';
-import { spotifyEnabled, verifyTracks } from './spotify.js';
-import { deriveState } from './deriveState.js';
+import { djReason, aiEnabled, aiModel, missionLabel } from '../integrations/openai.js';
+import { spotifyEnabled, verifyTracks } from '../integrations/spotifyClient.js';
+import { deriveListenerState } from '../lib/deriveListenerState.js';
 
-// deterministic fallback deps
 import { TRACKS } from '../data/tracks.js';
-import { MISSIONS, selectMission } from './missions.js';
-import { applyFeedback } from './feedback.js';
-import { rankTracks } from './score.js';
-import { makeAlbumArt } from './albumArt.js';
-import { djLineTemplate } from './fallbackVoice.js';
+import { MISSIONS, selectMission } from '../lib/missions.js';
+import { applyFeedback } from '../lib/feedback.js';
+import { rankTracks } from '../lib/score.js';
+import { makeAlbumArt } from '../lib/albumArt.js';
+import { djLineTemplate } from '../lib/fallbackVoice.js';
 
 export async function recommend(ctx, options = {}) {
   const { action = 'play_something', exclude = [], lastArtist = null, currentMission = null } = options;
@@ -31,11 +28,9 @@ export async function recommend(ctx, options = {}) {
   return deterministicRecommend(ctx, { action, exclude, lastArtist, currentMission });
 }
 
-// ---------------- AI-first path ----------------
 async function aiRecommend(ctx, { action, exclude }) {
   const plan = await djReason(ctx, { action, exclude });
 
-  // Ground the AI's songs in real Spotify metadata (drops any not found).
   const verified = await verifyTracks(plan.tracks);
   if (!verified.length) throw new Error('no_verified_tracks');
 
@@ -43,7 +38,7 @@ async function aiRecommend(ctx, { action, exclude }) {
     .map((v) => toAiCard(v, plan.mission))
     .sort((a, b) => b.matchScore - a.matchScore);
 
-  const derived = deriveState(ctx); // cheap; just for signalsReferenced
+  const derived = deriveListenerState(ctx);
 
   return {
     context: ctx,
@@ -78,7 +73,6 @@ function toAiCard(v, mission) {
     durationMs: s.durationMs,
     explicit: s.explicit,
     mission,
-    // AI-predicted audio features (Spotify can't supply these for this app)
     predicted: {
       energy: clamp01(p.energy),
       valence: clamp01(p.valence),
@@ -94,9 +88,8 @@ function toAiCard(v, mission) {
   };
 }
 
-// ---------------- deterministic fallback ----------------
 function deterministicRecommend(ctx, { action, exclude, lastArtist, currentMission }) {
-  const derived = deriveState(ctx);
+  const derived = deriveListenerState(ctx);
   const baseline = selectMission(ctx, derived);
   const fb = applyFeedback(action, MISSIONS[baseline].targets);
   const mission = fb.lockMission && currentMission && MISSIONS[currentMission] ? currentMission : baseline;

@@ -1,7 +1,7 @@
 /**
- * The Sonicstride AI DJ brain (OpenAI). This is the PRIMARY decision-maker, not a
- * fallback. In one reasoned call it:
- *   - reads the whole moment (time, energy/sleep/stress, weather, what's ahead)
+ * OpenAI chat integration — Magic Shuffle “AI DJ” planner (primary path when configured).
+ * In one reasoned call it:
+ *   - reads the whole moment (biometrics, weather, calendar, time, activity)
  *   - thinks like a DJ who cares about well-being (lift a sluggish morning, ease a
  *     wired night, never add chaos to stress)
  *   - PREDICTS the ideal sound profile (the audio "scales" Spotify won't give us)
@@ -33,10 +33,10 @@ export const MISSION_LABELS = {
   explore_adjacent: 'Explore Adjacent',
 };
 
-const SYSTEM = `You are Sonicstride, an intelligent AI DJ who genuinely cares about the listener's well-being. You think like a thoughtful human DJ, not a genre-matcher.
+const SYSTEM = `You are Magic Shuffle, an intelligent AI DJ who genuinely cares about the listener's well-being. You think like a thoughtful human DJ, not a genre-matcher.
 
 How you think:
-- Read the WHOLE moment: time of day, body signals (energy, sleep, stress 0-100), weather, activity, and what's coming up. Then decide what music actually SERVES this person right now.
+- Read the WHOLE moment: time of day and place; **biometric-style signals** (energy, sleep, stress as 0–100); **current weather** (conditions and rain likelihood); **what their calendar says is next** (meetings, commute, focus blocks, workouts); and activity. Then decide what music actually SERVES this person right now.
 - Music is a tool for well-being, so adapt with intent — do not just mirror the data:
   * Morning + low energy / poor sleep -> gently lift and energize (don't blast them awake).
   * Evening/night + tired or wired -> ease them down, soothe, lower the tempo.

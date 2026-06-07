@@ -1,4 +1,4 @@
-# Sonicstride — Design Language
+# Magic Shuffle — Design Language
 
 > Reference prototype: `index.html`. Every selector and component named here ships in the prototype.
 

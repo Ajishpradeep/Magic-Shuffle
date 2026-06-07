@@ -1,4 +1,4 @@
-# Sonicstride — Engine Spec
+# Magic Shuffle — Engine Spec
 
 > Deterministic recommendation rules. The prototype implements every rule below exactly; engineers can replace the catalog with a real provider but **must** preserve the rule order and weights.
 
@@ -44,7 +44,7 @@ See `data.jsx → MISSIONS` for `target = { energy, valence, vocalDensity }` per
 }
 ```
 
-## 2. `deriveState(ctx)`
+## 2. `deriveListenerState(ctx)` (spec historically called `deriveState`)
 
 Pure function — no IO. Returns:
 ```ts

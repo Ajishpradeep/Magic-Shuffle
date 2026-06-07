@@ -1,4 +1,4 @@
-# 🎧 Sonicstride — Smart AI DJ · Complete Handoff
+# 🎧 Magic Shuffle — Smart AI DJ · Complete Handoff
 
 > The single source of truth for this project. Product vision, architecture, the AI
 > design, the hard Spotify constraints (verified), the full API contract for the
@@ -8,9 +8,7 @@
 
 ## 1. What it is
 
-Sonicstride is a **Smart AI DJ for well-being**. It reads a person's current moment —
-time of day, body signals (energy / sleep / stress), weather, activity, what's coming
-up — and an AI DJ chooses music that *serves* them, then speaks like a warm human DJ.
+Magic Shuffle is a **personalized song picker** wrapped as a Smart AI DJ for well-being. It fuses **biometric-style signals** (energy, sleep, stress), **live-style weather** (conditions and rain likelihood), **what’s on the calendar next** (meetings, commutes, focus blocks), plus time, place, and activity — then chooses music that *serves* that exact moment, not a generic genre. The DJ speaks in a warm, human voice line.
 
 It doesn't just mirror the data, it cares:
 - Morning + sluggish / poor sleep → gently **lift and energize** (don't blast them awake).
@@ -45,7 +43,7 @@ and generated fallback art.
 **Hero scenario (the one to polish first):**
 ```json
 { "energyLevel": 100, "sleepQuality": 40, "stressLevel": 40,
-  "weather": "Gloomy, 60% chance of rain", "schedule": "Hackathon at 10am",
+  "weather": "Gloomy, 60% chance of rain", "calendar": "Hackathon at 10am",
   "timeOfDay": "Early morning", "location": "Taipei" }
 ```
 Expected read: *rainy morning, poor sleep, good energy, mild pressure → gentle
@@ -119,23 +117,31 @@ achieved within the real API limits. Per-track features carry `featureSource:
 ## 5. Repo layout
 
 ```
-server.js              Express API (the only entry point)
-data/
-  contexts.js          5 demo context profiles (the switcher)
-  tracks.js            local tagged catalog — fallback pool only
 src/
-  ai.js                ⭐ the AI DJ brain (reasoning + song proposal, gpt-4.1)
-  spotify.js           Client-Credentials token + song verification/grounding
-  recommend.js         orchestrator: AI → Spotify-verify → assemble (+ fallback)
-  deriveState.js       deterministic context → user state (fallback + signals)
-  missions.js          mission defs + deterministic selection (fallback)
-  score.js             deterministic weighted scorer (fallback)
-  feedback.js          feedback-button → target nudges (fallback)
-  fallbackVoice.js     template DJ lines (fallback only)
-  albumArt.js          offline SVG album-art for the fallback catalog
-public/                thin REFERENCE UI (partner rebuilds the visuals)
-phase2-spotify/         shelved, tested Spotify OAuth + Web Playback code (Phase 2)
-.env                   secrets (gitignored)
+  server.js              process entry (listen)
+  app.js                 Express factory — routes + static `public/`
+  middleware/
+    cors.js              loopback + env allow-list CORS
+  data/
+    contexts.js          demo listener-moment profiles (switcher)
+    tracks.js            local tagged catalog (deterministic pool)
+  integrations/
+    openai.js            AI DJ planner (Chat Completions + JSON)
+    spotifyClient.js     client-credentials token + track search/verify
+    spotifyUserAuth.js   user OAuth + Web Playback helpers
+  services/
+    recommend.js         AI → verify → response (+ deterministic fallback)
+  lib/
+    listenerContext.js   calendarSummary() and moment helpers
+    deriveListenerState.js   rule-based state + signalsReferenced
+    missions.js          mission defs + deterministic selection
+    score.js             weighted scorer + rankTracks
+    feedback.js          feedback actions → target nudges
+    fallbackVoice.js     template DJ lines (fallback)
+    albumArt.js          SVG placeholders for catalog art
+public/                  SPA (reference UI; hits all APIs)
+docs/design/             design + engine notes (legacy prototype spec)
+.env                     secrets (gitignored)
 ```
 
 ---
@@ -179,7 +185,7 @@ session state (what's been played, current mission) and passes it back each call
 
 ### `GET /api/health`
 ```json
-{ "ok": true, "service": "sonicstride", "version": 1,
+{ "ok": true, "service": "magic-shuffle", "version": 1,
   "mode": "ai-grounded", "aiEnabled": true, "aiModel": "gpt-4.1",
   "spotifyGrounding": true, "missions": [...], "feedbackActions": [...],
   "contexts": 5, "fallbackTracks": 28 }
@@ -191,7 +197,7 @@ Demo profiles for the context switcher.
 { "contexts": [ { "id": "rainy_taipei_morning", "label": "Rainy Taipei morning",
   "energyLevel": 100, "sleepQuality": 40, "stressLevel": 40,
   "weather": "Gloomy, 60% chance of rain", "rainChance": 60,
-  "schedule": "Hackathon at 10am", "timeOfDay": "Early morning",
+  "calendar": "Hackathon at 10am", "timeOfDay": "Early morning",
   "location": "Taipei", "activity": "waking", "userName": "Jasmine" } ] }
 ```
 
@@ -202,7 +208,7 @@ Used for the **Play Something** tap and every feedback button.
 | field | type | required | notes |
 |---|---|---|---|
 | `contextId` | string | one of | id from `/api/contexts` |
-| `context` | object | one of | OR a full custom snapshot (same shape) — any scenario |
+| `context` | object | one of | Full listener moment: biometrics (`energyLevel`, `sleepQuality`, `stressLevel`), `weather`, `rainChance`, **`calendar`** (next block / event; legacy field **`schedule`** is treated the same), `timeOfDay`, `location`, `activity`, `userName`, … |
 | `action` | string | no | a `feedbackActions` value; default `play_something` |
 | `exclude` | string[] | no | already-played songs as `"Title — Artist"` strings |
 | `currentMission` | string | no | for `keep_this_vibe` |
@@ -245,7 +251,7 @@ Used for the **Play Something** tap and every feedback button.
     "featureSource": "ai-estimate"       // "catalog" in deterministic mode
   },
   "backups": [ /* 2–3 more cards, same shape */ ],
-  "signalsReferenced": ["energy","sleep","weather","schedule","timeOfDay"],
+  "signalsReferenced": ["energy","sleep","weather","calendar","timeOfDay"],
   "ai": { "enabled": true, "model": "gpt-4.1", "mode": "ai-grounded",
           "interpret": "ai", "voice": "ai" }
 }
@@ -303,9 +309,9 @@ predicted ideal sound). Missions: `warm_start`, `gentle_activation`, `focus_flow
 `targetProfile` features are `0.0–1.0` (energy, valence, acousticness, danceability,
 vocalDensity) plus a `tempoBpm` range. Per-track `predicted` uses the same scales with a
 single BPM. The well-being mapping (lift mornings, ease nights, calm stress, drive
-workouts) lives in the AI system prompt in `src/ai.js` — tune behavior there.
+workouts) lives in the AI system prompt in `src/integrations/openai.js` — tune behavior there.
 
-The deterministic fallback (`src/score.js`) uses the documented weighted formula
+The deterministic fallback (`src/lib/score.js`) uses the documented weighted formula
 (`missionFit*0.35 + energyFit*0.20 + moodFit*0.15 + contextFit*0.15 +
 userFeedbackFit*0.10 + noveltyFit*0.05 − penalties`) over the local catalog.
 
@@ -333,7 +339,7 @@ language — the DJ speaks in music terms.
 - **AI-estimated features:** per-track energy/valence/etc. are the model's estimates, not
   Spotify's (which are unavailable — see §4). Good for well-known songs; weaker for
   obscure ones, which is why the prompt asks for findable tracks.
-- **Placeholder catalog:** `data/tracks.js` (fallback pool) is seed data — swap for a
+- **Placeholder catalog:** `src/data/tracks.js` (fallback pool) is seed data — swap for a
   real licensed catalog when ready. The engine is catalog-agnostic.
 
 ---
@@ -344,17 +350,16 @@ After the demo is compelling:
 1. Native iOS reads **HealthKit** (with permission); watchOS streams live workout state.
 2. **WeatherKit** for real weather context.
 3. **Spotify Connect / Web Playback SDK** for real in-app playback (Premium users) —
-   ✅ **IMPLEMENTED** (see the playback endpoints in §8 and `src/spotifyAuth.js`).
+   ✅ **IMPLEMENTED** (see the playback endpoints in §8 and `src/integrations/spotifyUserAuth.js`).
    Tracks play inside the page with real cover art; no jump to the Spotify app.
    Key facts:
-   - **Authorization Code** flow, client secret server-side (`src/spotifyAuth.js`).
+   - **Authorization Code** flow, client secret server-side (`src/integrations/spotifyUserAuth.js`).
    - Redirect URI must be **`http://127.0.0.1:3000/callback`** exactly (loopback IP, not
      `localhost`); dev-mode apps only allow allowlisted Spotify accounts (add yours
      under the dashboard's *Users and Access*).
    - Full in-browser playback needs **Spotify Premium**; the SDK plays via
      `PUT /v1/me/player/play` on its virtual device. `preview_url` is usually null on
      this quota — the UI falls back to an "Open in Spotify" link.
-   - The earlier standalone prototype still lives in `phase2-spotify/` for reference.
 4. User playlists / saved tracks as the candidate pool; on-device tagging and feedback
    improve picks without depending on the deprecated Spotify feature APIs.
 

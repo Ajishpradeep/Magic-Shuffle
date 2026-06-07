@@ -1,4 +1,4 @@
-// Sonicstride polished UI wired to the real AI-DJ backend.
+// Magic Shuffle — polished UI wired to the real AI-DJ backend.
 const $ = (id) => document.getElementById(id);
 
 let contexts = [];
@@ -287,7 +287,7 @@ function renderContext(context) {
   el.weatherCondition.textContent = getWeatherCondition(displayContext.weather);
   el.tempValue.textContent = displayContext.rainChance ?? '--';
   el.locationValue.textContent = displayContext.location;
-  el.scheduleValue.textContent = `${displayContext.schedule} · ${taipeiClockLabel()}`;
+  el.scheduleValue.textContent = `${displayContext.calendar || displayContext.schedule || '—'} · ${taipeiClockLabel()}`;
   el.greetingTitle.textContent = greetingHeadline(displayContext);
 
   renderDots(el.energyDots, (displayContext.energyLevel || 0) / 100, 158);
@@ -301,7 +301,7 @@ function renderContext(context) {
 function resetRecommendation() {
   el.missionLabel.textContent = 'Ready';
   el.trackTitle.textContent = 'Pick a Set';
-  el.trackArtist.textContent = 'Sonicstride';
+  el.trackArtist.textContent = 'Magic Shuffle';
   el.bpmValue.textContent = '--';
   el.trackMeta.textContent = 'Context-aware recommendations are ready.';
   el.scoreInsight.textContent = '--';
@@ -645,7 +645,7 @@ function initPlayer() {
   if (player || !window.Spotify || !session.accessToken) return;
 
   player = new Spotify.Player({
-    name: 'Sonicstride Player',
+    name: 'Magic Shuffle Player',
     getOAuthToken: (cb) => cb(session.accessToken),
     volume: 0.6,
   });
@@ -841,7 +841,7 @@ function analysisDetail(context) {
     context?.sleepQuality != null ? `sleep ${context.sleepQuality}` : null,
     context?.stressLevel != null ? `stress ${context.stressLevel}` : null,
     context?.weather || null,
-    context?.schedule || null,
+    context?.calendar || context?.schedule || null,
   ].filter(Boolean);
   return `Checking ${signals.join(', ')} and matching the vibe before I pick the next track.`;
 }
@@ -902,7 +902,7 @@ function formatDuration(seconds) {
 }
 
 function contextSummary(context) {
-  return [context.weather, context.schedule, context.timeOfDay].filter(Boolean).join(' / ');
+  return [context.weather, context.calendar || context.schedule, context.timeOfDay].filter(Boolean).join(' / ');
 }
 
 function getWeatherCondition(weather = '') {
@@ -941,7 +941,7 @@ function percent(value = 0) {
 
 function hashHue(value) {
   let hash = 0;
-  for (const char of String(value || 'sonicstride')) hash = (hash * 31 + char.charCodeAt(0)) % 360;
+  for (const char of String(value || 'magicshuffle')) hash = (hash * 31 + char.charCodeAt(0)) % 360;
   return hash;
 }
 

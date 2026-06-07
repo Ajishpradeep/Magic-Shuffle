@@ -1,9 +1,11 @@
 /**
- * Demo context snapshots (mock data for V1). These stand in for what would later
- * come from HealthKit / WeatherKit / Calendar. The UI's "context profile switcher"
- * lists these; the first is the hero demo (Taipei pitch-practice setup).
+ * Demo context snapshots (mock data for V1). Shape matches what a production app
+ * would assemble from:
+ * - Biometrics: energyLevel, sleepQuality, stressLevel (0–100), e.g. from a wearable
+ * - Weather: human-readable `weather` plus `rainChance` (0–100)
+ * - Calendar: `calendar` — next commitment / focus block (EventKit, Google Calendar, …)
  *
- * energyLevel / sleepQuality / stressLevel are 0-100 demo signals.
+ * The UI context switcher lists these. The first profile is the hero Taipei demo.
  */
 export const CONTEXTS = [
   {
@@ -14,7 +16,7 @@ export const CONTEXTS = [
     stressLevel: 92,
     weather: 'Partly cloudy, 60% chance of showers',
     rainChance: 60,
-    schedule: 'Pitch practice at 10:00 AM',
+    calendar: 'Pitch practice at 10:00 AM',
     timeOfDay: 'Taipei morning',
     location: 'Taipei',
     activity: 'pitch_practice',
@@ -28,7 +30,7 @@ export const CONTEXTS = [
     stressLevel: 55,
     weather: 'Clear, mild',
     rainChance: 5,
-    schedule: 'Heads-down coding, 2 hours',
+    calendar: 'Heads-down coding, 2 hours',
     timeOfDay: 'Mid-morning',
     location: 'Home office',
     activity: 'focus',
@@ -42,7 +44,7 @@ export const CONTEXTS = [
     stressLevel: 60,
     weather: 'Steady rain',
     rainChance: 90,
-    schedule: 'Commute to office',
+    calendar: 'Commute to office',
     timeOfDay: 'Morning',
     location: 'City transit',
     activity: 'commute',
@@ -56,7 +58,7 @@ export const CONTEXTS = [
     stressLevel: 30,
     weather: 'Sunny, warm',
     rainChance: 0,
-    schedule: 'Gym session',
+    calendar: 'Gym session',
     timeOfDay: 'Afternoon',
     location: 'Gym',
     activity: 'workout',
@@ -70,7 +72,7 @@ export const CONTEXTS = [
     stressLevel: 50,
     weather: 'Cool night',
     rainChance: 20,
-    schedule: 'No plans, relaxing',
+    calendar: 'No plans, relaxing',
     timeOfDay: 'Night',
     location: 'Home',
     activity: 'wind_down',

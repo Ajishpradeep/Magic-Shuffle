@@ -3,6 +3,8 @@
  * plus the deterministic mission-selection rules from the handoff. AI may override
  * the choice, but this always provides an explainable baseline + fallback.
  */
+import { calendarSummary } from './listenerContext.js';
+
 export const MISSIONS = {
   gentle_activation: {
     id: 'gentle_activation',
@@ -47,7 +49,7 @@ export const isMission = (id) => Object.prototype.hasOwnProperty.call(MISSIONS, 
 
 /** Deterministic mission selection — mirrors the handoff's Mission Rules. */
 export function selectMission(ctx, derived) {
-  const work = /work|study|coding|focus|hackathon/i.test(ctx.schedule || '');
+  const work = /work|study|coding|focus|hackathon/i.test(calendarSummary(ctx));
 
   // Deep focus
   if (ctx.activity === 'focus') return 'focus_flow';

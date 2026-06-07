@@ -5,8 +5,8 @@ process.env.OPENAI_API_KEY = '';
 process.env.SPOTIFY_CLIENT_ID = '';
 process.env.SPOTIFY_CLIENT_SECRET = '';
 
-const { recommend } = await import('../src/recommend.js');
-const { getContext } = await import('../data/contexts.js');
+const { recommend } = await import('../src/services/recommend.js');
+const { getContext } = await import('../src/data/contexts.js');
 
 test('deterministic fallback avoids UI title/artist exclude tags', async () => {
   const ctx = getContext('pitch_practice_taipei');

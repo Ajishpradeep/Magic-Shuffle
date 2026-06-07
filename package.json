@@ -1,12 +1,12 @@
 {
-  "name": "moodagent",
+  "name": "magic-shuffle",
   "version": "1.0.0",
-  "description": "Map biometric signals (energy, stress, sleep) to Spotify music recommendations and play them in-browser.",
+  "description": "Magic Shuffle — personalized song picker from biometrics, weather, and calendar context; Spotify + optional playback.",
   "type": "module",
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
     "test": "node --test"
   },
   "engines": {

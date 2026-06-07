@@ -1,8 +1,6 @@
 /**
- * Spotify client — used only to GROUND the AI's picks in real songs (album art,
- * URI, link, year, duration). Uses the Client Credentials flow, so NO user login
- * is needed for V1. (Audio-features / recommendations are dead for this app's
- * quota — verified 403/404 — so we never call them; the AI is the feature brain.)
+ * Spotify API — client credentials for grounding AI picks (search / metadata only).
+ * Does not use audio-features or recommendation endpoints for this app.
  */
 const ID = process.env.SPOTIFY_CLIENT_ID;
 const SECRET = process.env.SPOTIFY_CLIENT_SECRET;
