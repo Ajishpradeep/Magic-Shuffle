@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sonicstride Smart AI DJ</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <canvas id="ambientField" aria-hidden="true"></canvas>
+
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <strong>sonicstride</strong>
+          <span class="brand-divider">/</span>
+          <span>AI DJ</span>
+        </div>
+
+        <div class="context-menu">
+          <button class="scenario-toggle glass-control" id="simulatorToggle" type="button">
+            <span class="status-dot"></span>
+            <strong id="contextLabel">Rainy Taipei Morning</strong>
+            <span class="chevron">v</span>
+          </button>
+          <div class="scenario-menu tile" style="--h: 320; --ai: 0.72; --ax: 50%; --ay: 0%;">
+            <div class="scenario-list" id="scenarioList"></div>
+            <div class="connector-panel">
+              <div class="connector-head">
+                <strong>Live context</strong>
+                <span>vibe, not vitals</span>
+              </div>
+              <div class="connector-grid">
+                <button class="glass-control connector" id="syncLiveButton" type="button">Weather</button>
+                <button class="glass-control connector" id="googleCalendarButton" type="button">Google Cal</button>
+                <button class="glass-control connector" id="motionButton" type="button">Motion</button>
+                <button class="glass-control connector" id="watchButton" type="button">Fake Watch</button>
+                <label class="glass-control connector file-action" for="calendarInput">ICS</label>
+                <input id="calendarInput" class="visually-hidden" type="file" accept=".ics,text/calendar" />
+              </div>
+              <div class="status-row">
+                <span id="watchStatus">Apple Watch simulated</span>
+                <span id="weatherStatus">Weather ready</span>
+                <span id="calendarStatus">Calendar not connected</span>
+                <span id="heartRateValue">--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="mosaic">
+        <div class="left-stack">
+          <section class="tile hero-tile" style="--h: 168; --ai: 0.9; --ax: 48%; --ay: 20%;" aria-label="Now playing">
+            <div class="hero-topline">
+              <span class="eyebrow" id="missionEyebrow">Tonight's Mission</span>
+              <strong id="missionLabel">Gentle Activation</strong>
+            </div>
+
+            <div class="hero-body">
+              <div class="album-wrap">
+                <div class="album-art" id="albumArt" aria-hidden="true">
+                  <div class="album-rings"></div>
+                </div>
+                <div class="match-meter">
+                  <span id="scoreInsight">99</span>
+                </div>
+              </div>
+
+              <div class="track-zone">
+                <h1 id="trackTitle">Morning Static</h1>
+                <p id="trackArtist">Hauer & Vale</p>
+
+                <div class="bpm-row">
+                  <span class="led" id="bpmValue">96</span>
+                  <span class="unit">BPM</span>
+                </div>
+                <p class="track-meta" id="trackMeta">Energy 3/5 / Warmth 4/5</p>
+
+                <div class="tick-scale hero-scale" id="progressTicks" aria-label="Track progress"></div>
+                <div class="time-row">
+                  <span id="elapsedTime">0:35</span>
+                  <span id="remainingTime">-2:58</span>
+                </div>
+
+                <div class="control-row">
+                  <button class="round-control glass-control" id="smoothButton" type="button" aria-label="Smooth it out">-</button>
+                  <button class="play-control" id="playButton" type="button" aria-label="Play something">II</button>
+                  <button class="round-control glass-control" id="energyButton" type="button" aria-label="More energy">+</button>
+                  <button class="round-control glass-control" id="keepButton" type="button" aria-label="Keep this vibe">&lt;3</button>
+                </div>
+
+                <div class="action-row">
+                  <button class="solid-pill" id="surpriseButton" type="button">Surprise me</button>
+                  <button class="outline-pill" id="whyButton" type="button">Why this?</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="tile voice-tile" style="--h: 320; --ai: 0.5; --ax: 54%; --ay: 80%;" aria-live="polite">
+            <div class="dj-avatar"><span></span></div>
+            <p id="djLine">
+              Good morning, Jasmine. Taipei's a little grey, and sleep wasn't perfect, so I'm keeping the lift light.
+              "Morning Static" has a warm groove without pushing too hard before your hackathon.
+            </p>
+          </section>
+
+          <section class="tile why-panel" id="whyPanel" style="--h: 320; --ai: 0.45; --ax: 70%; --ay: 20%;" hidden>
+            <div>
+              <span class="eyebrow">Why this?</span>
+              <p id="reasonInsight">Gloomy weather plus low sleep calls for warm lift, and Morning Static keeps the groove bright without pushing too hard.</p>
+            </div>
+            <div class="why-grid" id="whyGrid"></div>
+          </section>
+        </div>
+
+        <aside class="right-stack">
+          <section class="stats-grid" aria-label="Context signals">
+            <article class="tile stat-tile" style="--h: 158; --ai: 0.82; --ax: 60%; --ay: 18%;">
+              <span>Energy</span>
+              <strong class="led" id="energyValue">100</strong>
+              <div class="dot-scale" id="energyDots"></div>
+              <p id="energyHint">Running high</p>
+            </article>
+            <article class="tile stat-tile" style="--h: 232; --ai: 0.72; --ax: 55%; --ay: 16%;">
+              <span>Sleep</span>
+              <strong class="led" id="sleepValue">40</strong>
+              <div class="tick-scale mini-scale" id="sleepTicks"></div>
+              <p id="sleepHint">Lighter than usual</p>
+            </article>
+            <article class="tile stat-tile" style="--h: 18; --ai: 0.74; --ax: 55%; --ay: 18%;">
+              <span>Stress</span>
+              <strong class="led" id="stressValue">40</strong>
+              <div class="dot-scale" id="stressDots"></div>
+              <p id="stressHint">Easy</p>
+            </article>
+          </section>
+
+          <section class="tile weather-tile" style="--h: 260; --ai: 0.9; --ax: 48%; --ay: 10%;" aria-label="Weather and schedule">
+            <div class="weather-head">
+              <span id="weatherCondition">Cloud / Gloomy</span>
+              <strong id="locationValue">Taipei</strong>
+            </div>
+            <div class="weather-temp">
+              <span class="led" id="tempValue">19</span>
+              <span>&deg;C</span>
+            </div>
+            <svg class="sparkline" id="weatherSpark" viewBox="0 0 300 34" aria-hidden="true">
+              <path d="M0 18 C 55 18, 60 30, 115 24 S 210 5, 300 18"></path>
+              <circle cx="238" cy="18" r="4"></circle>
+            </svg>
+            <p id="scheduleValue">Hackathon at 10am</p>
+          </section>
+
+          <section class="tile upnext-tile" style="--h: 158; --ai: 0.7; --ax: 22%; --ay: 18%;" aria-label="Up next">
+            <div class="section-head">
+              <h2>Up next</h2>
+              <button class="glass-control small-pill" id="reshuffleButton" type="button">Reshuffle</button>
+            </div>
+            <div class="upnext-list" id="upNextList"></div>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="config.js"></script>
+    <script src="data.js"></script>
+    <script src="recommender.js"></script>
+    <script src="live-context.js"></script>
+    <script src="google-calendar.js"></script>
+    <script src="watch-simulator.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

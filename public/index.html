@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sonicstride Smart AI DJ</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <canvas id="ambientField" aria-hidden="true"></canvas>
+
+    <section class="onboarding-flow" id="onboardingFlow" aria-live="polite">
+      <div class="tile onboarding-card onboarding-step active" data-onboarding-step="name" style="--h: 320; --ai: 0.72; --ax: 48%; --ay: 20%;">
+        <div class="brand-lockup onboarding-brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <strong>sonicstride</strong>
+          <span class="brand-divider">/</span>
+          <span>AI DJ</span>
+        </div>
+        <div class="onboarding-copy">
+          <span class="eyebrow">Personalize the demo</span>
+          <h1>Hey, what&apos;s your name?</h1>
+          <p>We will use it to personalize the Apple Watch, calendar, weather, and music recommendation story.</p>
+        </div>
+        <form class="name-form" id="nameForm">
+          <label class="visually-hidden" for="userNameInput">Your name</label>
+          <input id="userNameInput" name="userName" autocomplete="given-name" placeholder="Type your name" />
+          <button class="solid-pill primary-action" id="beginSetupButton" type="submit">Continue</button>
+        </form>
+      </div>
+
+      <div class="tile onboarding-card onboarding-step" data-onboarding-step="connect" style="--h: 168; --ai: 0.86; --ax: 52%; --ay: 16%;" hidden>
+        <div class="onboarding-copy">
+          <span class="eyebrow">Authorizing demo signals</span>
+          <h1 id="setupTitle">Connecting your day</h1>
+          <p id="setupDetail">We are preparing Apple Watch, Google Calendar, and Taipei weather signals for the pitch-practice read.</p>
+        </div>
+        <div class="connector-stack" aria-label="Demo data connection status">
+          <article class="connector-card" id="watchConnector">
+            <span>Apple Watch</span>
+            <strong>Reading heart rate, sleep, and stress</strong>
+            <i>Waiting</i>
+          </article>
+          <article class="connector-card" id="calendarConnector">
+            <span>Google Calendar</span>
+            <strong>Finding the next activity</strong>
+            <i>Waiting</i>
+          </article>
+          <article class="connector-card" id="weatherConnector">
+            <span>Weather</span>
+            <strong>Checking Taipei conditions</strong>
+            <i>Waiting</i>
+          </article>
+        </div>
+        <button class="solid-pill primary-action launch-demo-button" id="enterDemoButton" type="button" disabled>Launch pitch practice</button>
+      </div>
+    </section>
+
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <strong>sonicstride</strong>
+          <span class="brand-divider">/</span>
+          <span>AI DJ</span>
+        </div>
+
+        <div class="top-actions">
+          <div id="spotifyAuth" class="spotify-auth"></div>
+          <div class="context-menu">
+            <button class="scenario-toggle glass-control" id="simulatorToggle" type="button">
+              <span class="status-dot"></span>
+              <strong id="contextLabel">Loading context</strong>
+              <span class="chevron">v</span>
+            </button>
+            <div class="scenario-menu tile" style="--h: 320; --ai: 0.72; --ax: 50%; --ay: 0%;">
+              <div class="scenario-list" id="scenarioList"></div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="tile greeting-tile" style="--h: 320; --ai: 0.5; --ax: 54%; --ay: 80%;" aria-live="polite">
+        <div class="dj-avatar"><span></span></div>
+        <div class="greeting-copy">
+          <span class="eyebrow">Today&apos;s signal</span>
+          <h1 id="greetingTitle">Good morning, Jasmine.</h1>
+          <p id="djLine">Choose a context and I will read the room before the first track.</p>
+        </div>
+      </section>
+
+      <section class="mosaic">
+        <div class="left-stack">
+          <section class="tile hero-tile" style="--h: 168; --ai: 0.9; --ax: 48%; --ay: 20%;" aria-label="Now playing">
+            <div class="hero-topline">
+              <span class="eyebrow" id="missionEyebrow">Current Mission</span>
+              <strong id="missionLabel">Ready</strong>
+            </div>
+
+            <div class="analysis-overlay" id="analysisOverlay" hidden aria-live="polite">
+              <span class="eyebrow">Analysing the room</span>
+              <strong id="analysisGreeting">Good morning. I am reading the moment.</strong>
+              <p id="analysisDetail">Checking energy, sleep, stress, weather, schedule, and the sound profile that fits.</p>
+              <div class="analysis-meter" aria-hidden="true">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+            </div>
+
+            <div class="hero-body">
+              <div class="album-wrap">
+                <div class="album-art" id="albumArt" aria-hidden="true">
+                  <div class="album-rings"></div>
+                </div>
+                <div class="match-meter">
+                  <span id="scoreInsight">--</span>
+                </div>
+              </div>
+
+              <div class="track-zone">
+                <h1 id="trackTitle">Pick a Set</h1>
+                <p id="trackArtist">Sonicstride</p>
+
+                <div class="bpm-row">
+                  <span class="led" id="bpmValue">--</span>
+                  <span class="unit">BPM</span>
+                </div>
+                <p class="track-meta" id="trackMeta">Context-aware recommendations are ready.</p>
+
+                <div class="tick-scale hero-scale" id="progressTicks" aria-label="Track progress"></div>
+                <div class="time-row">
+                  <span id="elapsedTime">0:00</span>
+                  <span id="remainingTime">--:--</span>
+                </div>
+
+                <div class="control-row">
+                  <button class="round-control glass-control" id="smoothButton" type="button" aria-label="Previous track">-</button>
+                  <button class="play-control" id="playButton" type="button" aria-label="Play music">PLAY</button>
+                  <button class="round-control glass-control" id="energyButton" type="button" aria-label="Next track">+</button>
+                  <button class="round-control glass-control" id="keepButton" type="button" aria-label="Keep this vibe">&lt;3</button>
+                </div>
+
+                <div class="action-row">
+                  <button class="solid-pill primary-action" id="playSessionButton" type="button">Play</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="tile playbar" id="playbar" style="--h: 126; --ai: 0.58; --ax: 16%; --ay: 34%;" hidden>
+            <button id="togglePlay" class="round-control glass-control" type="button" aria-label="Toggle playback">II</button>
+            <div class="playbar-copy">
+              <strong id="nowPlaying">Nothing playing yet</strong>
+              <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+              <span id="playStatus">Connect Spotify Premium for full in-app playback.</span>
+            </div>
+          </section>
+        </div>
+
+        <aside class="right-stack">
+          <section class="stats-grid" aria-label="Context signals">
+            <article class="tile stat-tile" style="--h: 158; --ai: 0.82; --ax: 60%; --ay: 18%;">
+              <span>Energy</span>
+              <strong class="led" id="energyValue">--</strong>
+              <div class="dot-scale" id="energyDots"></div>
+              <p id="energyHint">Ready</p>
+            </article>
+            <article class="tile stat-tile" style="--h: 232; --ai: 0.72; --ax: 55%; --ay: 16%;">
+              <span>Sleep</span>
+              <strong class="led" id="sleepValue">--</strong>
+              <div class="tick-scale mini-scale" id="sleepTicks"></div>
+              <p id="sleepHint">Ready</p>
+            </article>
+            <article class="tile stat-tile" style="--h: 18; --ai: 0.74; --ax: 55%; --ay: 18%;">
+              <span>Stress</span>
+              <strong class="led" id="stressValue">--</strong>
+              <div class="dot-scale" id="stressDots"></div>
+              <p id="stressHint">Ready</p>
+            </article>
+          </section>
+
+          <section class="tile weather-tile" style="--h: 260; --ai: 0.9; --ax: 48%; --ay: 10%;" aria-label="Weather and schedule">
+            <div class="weather-head">
+              <span id="weatherCondition">Weather</span>
+              <strong id="locationValue">Location</strong>
+            </div>
+            <div class="weather-temp">
+              <span class="led" id="tempValue">--</span>
+              <span>% rain</span>
+            </div>
+            <svg class="sparkline" id="weatherSpark" viewBox="0 0 300 34" aria-hidden="true">
+              <path d="M0 18 C 55 18, 60 30, 115 24 S 210 5, 300 18"></path>
+              <circle cx="238" cy="18" r="4"></circle>
+            </svg>
+            <p id="scheduleValue">Schedule</p>
+          </section>
+        </aside>
+
+        <section class="bottom-dock" aria-label="Set details">
+          <section class="tile vibe-panel bottom-vibe-tile" style="--h: 168; --ai: 0.72; --ax: 50%; --ay: 20%;" aria-label="Vibe metrics">
+            <div class="section-head compact">
+              <h2>Vibe Scale</h2>
+              <span id="featureSource">backend profile</span>
+            </div>
+            <div class="vibe-grid" id="vibeScaleGrid"></div>
+          </section>
+
+          <section class="tile why-panel" id="whyPanel" style="--h: 320; --ai: 0.45; --ax: 70%; --ay: 20%;">
+            <div>
+              <span class="eyebrow">Why this set</span>
+              <p id="reasonInsight">Tap Play and I will explain the sound profile here.</p>
+            </div>
+            <div class="why-grid" id="whyGrid"></div>
+          </section>
+
+          <section class="tile upnext-tile" style="--h: 158; --ai: 0.7; --ax: 22%; --ay: 18%;" aria-label="Up next">
+            <div class="section-head">
+              <h2>Up next</h2>
+              <button class="glass-control small-pill" id="reshuffleButton" type="button">Reshuffle</button>
+            </div>
+            <div class="upnext-list" id="upNextList"></div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
