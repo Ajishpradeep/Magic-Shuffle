@@ -3,6 +3,12 @@
  * unavailable). The AI writes the real lines in normal operation.
  */
 const TEMPLATES = {
+  // regulation goals (research-based playlist arc)
+  calm_down: 'Let’s take the edge off — starting where you are, then easing the tempo down.',
+  energize: 'Let’s lift this — starting gentle, then building the energy up.',
+  wind_down: 'Winding things down soft — lowering the tempo to let you settle.',
+  maintain: 'Holding a good groove — warm, steady, right where you are.',
+  // legacy missions
   warm_start: 'Let’s ease in and warm things up.',
   gentle_activation: 'Let’s warm this up without rushing it — a steady groove to get you moving.',
   focus_flow: 'Settling the room into something clean and steady so you can lock in.',

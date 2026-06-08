@@ -9,9 +9,19 @@ import { CONTEXTS, getContext } from './data/contexts.js';
 import { TRACKS } from './data/tracks.js';
 import { MISSIONS } from './lib/missions.js';
 import { FEEDBACK_ACTIONS } from './lib/feedback.js';
-import { recommend } from './services/recommend.js';
+import { recommend, recommendPlaylist } from './services/recommend.js';
+import { assembleLiveContext } from './services/buildContext.js';
 import { aiEnabled, aiModel } from './integrations/openai.js';
 import { spotifyEnabled } from './integrations/spotifyClient.js';
+import { weatherEnabled } from './integrations/weather.js';
+import { biometricProvider } from './integrations/biometrics.js';
+import {
+  calendarConfigured,
+  buildAuthUrl as buildGoogleAuthUrl,
+  exchangeCode as exchangeGoogleCode,
+  getSession as getGoogleSession,
+  logout as googleLogout,
+} from './integrations/googleCalendar.js';
 import {
   playbackConfigured,
   buildLoginUrl,
@@ -46,11 +56,31 @@ export function createApp() {
       aiModel: aiModel(),
       spotifyGrounding: spotifyEnabled(),
       playback: playbackConfigured(),
+      signals: {
+        weather: weatherEnabled() ? 'open-meteo' : 'off',
+        calendar: calendarConfigured() ? 'google-oauth' : 'mock',
+        biometrics: biometricProvider(),
+      },
       missions: Object.keys(MISSIONS),
       feedbackActions: FEEDBACK_ACTIONS,
       contexts: CONTEXTS.length,
       fallbackTracks: TRACKS.length,
     });
+  });
+
+  // Live trigger: assemble real signals (weather + calendar + generated biometrics)
+  // and return a full arc-ordered playlist.
+  app.get('/api/playlist', async (req, res) => {
+    try {
+      const { context, sources } = await assembleLiveContext({ userName: req.query.name || 'You' });
+      const action = FEEDBACK_ACTIONS.includes(req.query.action) ? req.query.action : 'play_something';
+      const length = Math.min(20, Math.max(4, parseInt(req.query.length, 10) || 12));
+      const result = await recommendPlaylist(context, { action, length });
+      res.json({ ...result, sources });
+    } catch (e) {
+      console.error('playlist error', e);
+      res.status(500).json({ error: 'playlist_failed', detail: String(e.message || e) });
+    }
   });
 
   app.get('/api/contexts', (req, res) => res.json({ contexts: CONTEXTS }));
@@ -81,6 +111,35 @@ export function createApp() {
 
   app.post('/api/logout', (req, res) => {
     logout();
+    res.json({ ok: true });
+  });
+
+  // --- Google Calendar OAuth (read-only; graceful fallback when unconfigured) ---
+  app.get('/google/login', (req, res) => {
+    if (!calendarConfigured()) return res.redirect('/?error=google_not_configured');
+    res.redirect(buildGoogleAuthUrl());
+  });
+
+  app.get('/google/callback', async (req, res) => {
+    const { code, error, state } = req.query;
+    if (error) return res.redirect(`/?error=${encodeURIComponent(error)}`);
+    if (!code) return res.redirect('/?error=missing_code');
+    try {
+      await exchangeGoogleCode(code, state);
+      res.redirect('/?google=connected');
+    } catch (e) {
+      console.error('google callback error', e);
+      const reason = e.message === 'invalid_state' ? 'invalid_state' : 'google_token_exchange_failed';
+      res.redirect(`/?error=${reason}`);
+    }
+  });
+
+  app.get('/api/google/session', async (req, res) => {
+    res.json(await getGoogleSession());
+  });
+
+  app.post('/api/google/logout', (req, res) => {
+    googleLogout();
     res.json({ ok: true });
   });
 
