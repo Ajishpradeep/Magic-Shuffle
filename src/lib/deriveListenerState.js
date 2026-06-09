@@ -13,8 +13,8 @@ export function deriveListenerState(ctx) {
   const stress = ctx.stressLevel ?? 50;
 
   let energyNeed = 'medium';
-  if (ctx.activity === 'workout' || energy >= 80) energyNeed = 'high';
-  else if (ctx.activity === 'wind_down' || energy <= 35) energyNeed = 'low';
+  if (ctx.activity === 'workout' || ctx.activity === 'wake' || energy >= 80) energyNeed = 'high';
+  else if (ctx.activity === 'wind_down' || ctx.activity === 'sleep' || ctx.activity === 'recovery' || energy <= 35) energyNeed = 'low';
   if (energy >= 80 && stress >= 60) energyNeed = 'controlled_high';
 
   let moodState = 'neutral';
@@ -35,9 +35,9 @@ export function deriveListenerState(ctx) {
   else if (stress <= 35 && energy <= 60) noveltyAppetite = 'explore';
 
   let vocalTolerance = 'lyrics_ok';
-  if (ctx.activity === 'focus') vocalTolerance = 'instrumental_preferred';
+  if (ctx.activity === 'focus' || ctx.activity === 'sleep') vocalTolerance = 'instrumental_preferred';
   else if (ctx.activity === 'workout') vocalTolerance = 'anthemic_vocals';
-  else if (stress >= 70) vocalTolerance = 'avoid_dense_lyrics';
+  else if (ctx.activity === 'recovery' || stress >= 70) vocalTolerance = 'avoid_dense_lyrics';
 
   const contextRisk =
     /night/i.test(ctx.timeOfDay || '') ||

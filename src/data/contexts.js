@@ -3,7 +3,10 @@
  * would assemble from:
  * - Biometrics: energyLevel, sleepQuality, stressLevel (0–100), e.g. from a wearable
  * - Weather: human-readable `weather` plus `rainChance` (0–100)
- * - Calendar: `calendar` — next commitment / focus block (EventKit, Google Calendar, …)
+ * - Calendar: `calendar` (one-line, back-compat) PLUS `nextEvent` { summary, minutesUntil,
+ *   allDay } and `nextActivity` — the structured signals that drive next-activity targeting
+ *   (README §5). Each demo showcases a different activity primer (social/focus/commute/
+ *   workout/sleep) so the switcher demonstrates the headline thesis.
  *
  * The UI context switcher lists these. The first profile is the hero Taipei demo.
  */
@@ -17,9 +20,11 @@ export const CONTEXTS = [
     weather: 'Partly cloudy, 60% chance of showers',
     rainChance: 60,
     calendar: 'Pitch practice at 10:00 AM',
-    timeOfDay: 'Taipei morning',
+    nextEvent: { summary: 'Pitch practice', minutesUntil: 25, allDay: false },
+    nextActivity: 'social',
+    timeOfDay: 'Early morning',
     location: 'Taipei',
-    activity: 'pitch_practice',
+    activity: 'social',
     userName: 'Jasmine',
   },
   {
@@ -31,7 +36,9 @@ export const CONTEXTS = [
     weather: 'Clear, mild',
     rainChance: 5,
     calendar: 'Heads-down coding, 2 hours',
-    timeOfDay: 'Mid-morning',
+    nextEvent: { summary: 'Heads-down coding', minutesUntil: 10, allDay: false },
+    nextActivity: 'focus',
+    timeOfDay: 'Morning',
     location: 'Home office',
     activity: 'focus',
     userName: 'Jasmine',
@@ -45,6 +52,8 @@ export const CONTEXTS = [
     weather: 'Steady rain',
     rainChance: 90,
     calendar: 'Commute to office',
+    nextEvent: { summary: 'Commute to office', minutesUntil: 5, allDay: false },
+    nextActivity: 'commute',
     timeOfDay: 'Morning',
     location: 'City transit',
     activity: 'commute',
@@ -59,6 +68,8 @@ export const CONTEXTS = [
     weather: 'Sunny, warm',
     rainChance: 0,
     calendar: 'Gym session',
+    nextEvent: { summary: 'Gym session', minutesUntil: 12, allDay: false },
+    nextActivity: 'workout',
     timeOfDay: 'Afternoon',
     location: 'Gym',
     activity: 'workout',
@@ -72,10 +83,12 @@ export const CONTEXTS = [
     stressLevel: 50,
     weather: 'Cool night',
     rainChance: 20,
-    calendar: 'No plans, relaxing',
+    calendar: 'Bedtime soon',
+    nextEvent: { summary: 'Bedtime', minutesUntil: 40, allDay: false },
+    nextActivity: 'sleep',
     timeOfDay: 'Night',
     location: 'Home',
-    activity: 'wind_down',
+    activity: 'sleep',
     userName: 'Jasmine',
   },
 ];

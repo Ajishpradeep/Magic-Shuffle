@@ -1,20 +1,26 @@
 /**
  * Recommendation pipeline (AI-first, then deterministic catalog fallback).
  *
- * Produces an ISO-PRINCIPLE PLAYLIST: an arc of tracks that starts near the
- * listener's current arousal (from the affect model) and ramps toward an
- * evidence-based regulation target (calm / energize / wind down / maintain).
+ * Produces a research-grade ISO-PRINCIPLE PLAYLIST: an arc of tracks that starts near the
+ * listener's current arousal (two-axis affect) and ramps toward the optimal entry-state for
+ * their NEXT scheduled activity (workout / focus / sleep / wake / social / commute / recovery),
+ * modulated by circadian phase + weather, dosed to the time until that activity, and wrapped in
+ * safety guardrails (no sad-loop, block lists, lyric/volume guidance).
  *
- * 1. OpenAI plans an arc-ordered set of real songs + DJ copy from the moment.
- * 2. Spotify client-credentials search grounds proposals in real metadata.
- * 3. buildArc finalizes the order so tempo/energy move smoothly.
- * 4. On failure, local catalog + the same arc keeps the app usable offline.
+ * 1. Classify the next activity + read affect → choose goal + target arc.
+ * 2. OpenAI plans an arc-ordered set of real songs + DJ copy from the moment.
+ * 3. Spotify client-credentials search grounds proposals in real metadata.
+ * 4. buildArc finalizes the order so tempo/energy move smoothly.
+ * 5. On failure, local catalog + the same arc keeps the app usable offline.
  */
 import { djPlaylist, aiEnabled, aiModel, missionLabel } from '../integrations/openai.js';
 import { spotifyEnabled, verifyTracks } from '../integrations/spotifyClient.js';
 import { deriveListenerState } from '../lib/deriveListenerState.js';
 import { toAffect, targetArc, goalLabel } from '../lib/affect.js';
-import { buildArc, catalogProfile } from '../lib/isoPlaylist.js';
+import { buildArc, catalogProfile, doseLength } from '../lib/isoPlaylist.js';
+import { classifyNextActivity } from '../lib/activityClassifier.js';
+import { getActivityTarget, ACTIVITY_LABELS } from '../data/activityTargets.js';
+import { capMatch, filterBlocked, lyricGuard, volumeNotice } from '../lib/safety.js';
 
 import { TRACKS } from '../data/tracks.js';
 import { djLineTemplate } from '../lib/fallbackVoice.js';
@@ -24,23 +30,52 @@ const DEFAULT_LENGTH = 12;
 
 /**
  * Build a full, arc-ordered playlist for a listener moment.
+ * @param {object} ctx listener moment
+ * @param {object} [options] { action, exclude, block, length }
  * @returns {Promise<object>} see shape below
  */
 export async function recommendPlaylist(ctx, options = {}) {
-  const { action = 'play_something', exclude = [], length = DEFAULT_LENGTH } = options;
+  const { action = 'play_something', exclude = [], block = [], length } = options;
 
+  // 1. Next-activity (headline thesis) — honour caller-supplied, else classify the calendar.
+  const cls = classifyContext(ctx);
+
+  // 2. Two-axis affect + target arc (goal from activity, modulated by circadian/weather).
   const affect = toAffect(ctx, ctx.timeOfDay);
-  const arc = applyActionToArc(targetArc(affect, ctx.timeOfDay), action);
+  const rawArc = targetArc(affect, {
+    timeOfDay: ctx.timeOfDay,
+    nextActivity: cls.activity,
+    confidence: cls.confidence,
+    weather: ctx.weather,
+    rainChance: ctx.rainChance,
+    tempC: ctx.tempC,
+  });
+  // 3. Apply feedback nudge, then SAFETY: cap the match so a low-valence user is never looped.
+  const arc = capMatch(applyActionToArc(rawArc, action));
+
+  // The EFFECTIVE activity is the one that actually drove the goal: 'none' when the next
+  // activity was too low-confidence and we fell back to current-state regulation. Dosing,
+  // labels, and the AI guidance all use this so we never claim to prime for what we ignored.
+  const effective = { activity: arc.activity, minutesUntil: arc.activity === 'none' ? null : cls.minutesUntil };
+
+  // 4. Dose the arc length to the time until the event (explicit `length` overrides).
+  const dose =
+    length != null
+      ? { tracks: clampInt(length, 4, 20), minutes: Math.round(clampInt(length, 4, 20) * 3.5) }
+      : doseLength(effective.minutesUntil, getActivityTarget(effective.activity).doseMinutes, DEFAULT_LENGTH);
+
   const excluded = normalizeExclude(exclude);
+  const guard = lyricGuard(arc.goal, effective.activity);
+  const shared = { cls: effective, affect, arc, dose, guard };
 
   if (aiEnabled() && spotifyEnabled()) {
     try {
-      return await aiPlaylist(ctx, { action, exclude, length, affect, arc });
+      return await aiPlaylist(ctx, { action, exclude, block, ...shared });
     } catch (e) {
       console.warn('[recommend] AI path failed, using deterministic fallback:', e.message);
     }
   }
-  return deterministicPlaylist(ctx, { affect, arc, length, excluded });
+  return deterministicPlaylist(ctx, { block, excluded, ...shared });
 }
 
 /** Back-compat single-pick wrapper: returns playlist + top pick + backups. */
@@ -48,17 +83,44 @@ export async function recommend(ctx, options = {}) {
   return recommendPlaylist(ctx, options);
 }
 
+/** Resolve the next activity from explicit fields or the calendar string. */
+function classifyContext(ctx) {
+  if (ctx.nextActivity && ctx.nextActivity !== 'none') {
+    return {
+      activity: ctx.nextActivity,
+      minutesUntil: ctx.nextEvent?.minutesUntil ?? null,
+      confidence: ctx.activityConfidence ?? 0.85,
+    };
+  }
+  const nextEvent = ctx.nextEvent || (ctx.calendar ? { summary: ctx.calendar } : null);
+  return classifyNextActivity(nextEvent, ctx.timeOfDay);
+}
+
 // ---------------------------------------------------------------- AI path -----
 
-async function aiPlaylist(ctx, { action, exclude, length, affect, arc }) {
-  const plan = await djPlaylist(ctx, { action, exclude, length, guidance: { goal: arc.goal, arc } });
+async function aiPlaylist(ctx, { action, exclude, block, cls, affect, arc, dose, guard }) {
+  const plan = await djPlaylist(ctx, {
+    action,
+    exclude,
+    length: dose.tracks,
+    guidance: {
+      goal: arc.goal,
+      nextActivity: cls.activity,
+      minutesUntil: cls.minutesUntil,
+      strategy: arc.strategy,
+      affect,
+      arc,
+      instrumentalPreferred: guard.instrumentalPreferred,
+    },
+  });
 
   const verified = await verifyTracks(plan.tracks);
   if (!verified.length) throw new Error('no_verified_tracks');
 
-  const candidates = verified.map((v) => toAiCard(v, plan));
-  const planArc = validArc(plan.arc) ? { start: plan.arc.start, target: plan.arc.target } : arc;
-  const playlist = buildArc(candidates, planArc, length).map(stripInternal);
+  const candidates = filterBlocked(verified.map((v) => toAiCard(v, plan)), block);
+  if (!candidates.length) throw new Error('all_blocked');
+  const planArc = validArc(plan.arc) ? capMatch({ start: plan.arc.start, target: plan.arc.target }) : arc;
+  const playlist = buildArc(candidates, planArc, dose.tracks).map(stripInternal);
 
   const derived = deriveListenerState(ctx);
   const goal = plan.goal || arc.goal;
@@ -69,6 +131,10 @@ async function aiPlaylist(ctx, { action, exclude, length, affect, arc }) {
     affect,
     arc: { ...planArc, goal },
     goal,
+    cls,
+    strategy: arc.strategy,
+    dose,
+    guard,
     playlist,
     mission: plan.mission || goal,
     moodAnalysis: plan.moodAnalysis,
@@ -105,9 +171,12 @@ function toAiCard(v, plan) {
 
 // ----------------------------------------------------- Deterministic path -----
 
-function deterministicPlaylist(ctx, { affect, arc, length, excluded }) {
-  const pool = TRACKS.filter((t) => !isExcluded(t, excluded)).map((t) => toLocalCard(t, arc.goal));
-  const playlist = buildArc(pool, arc, length).map(stripInternal);
+function deterministicPlaylist(ctx, { block, excluded, cls, affect, arc, dose, guard }) {
+  const pool = filterBlocked(
+    TRACKS.filter((t) => !isExcluded(t, excluded)).map((t) => toLocalCard(t, arc.goal)),
+    block
+  );
+  const playlist = buildArc(pool, arc, dose.tracks).map(stripInternal);
 
   const derived = deriveListenerState(ctx);
   const top = playlist[0];
@@ -118,6 +187,10 @@ function deterministicPlaylist(ctx, { affect, arc, length, excluded }) {
     affect,
     arc,
     goal: arc.goal,
+    cls,
+    strategy: arc.strategy,
+    dose,
+    guard,
     playlist,
     mission: arc.goal,
     moodAnalysis: derived.moodState,
@@ -141,6 +214,7 @@ function toLocalCard(t, mission) {
     year: '',
     durationMs: 0,
     explicit: t.explicit,
+    genres: t.genres,
     mission,
     predicted: { ...p, tempoBpm: t.bpm },
     profile: p,
@@ -153,25 +227,30 @@ function toLocalCard(t, mission) {
 
 // ----------------------------------------------------------- shared shape -----
 
-function assemble({ ctx, derived, affect, arc, goal, playlist, mission, moodAnalysis, reasoning, targetProfile, dj, mode }) {
+function assemble({ ctx, derived, affect, arc, goal, cls, strategy, dose, guard, playlist, mission, moodAnalysis, reasoning, targetProfile, dj, mode }) {
   return {
     context: ctx,
     state: {
       moodAnalysis,
       reasoning,
       narrative: moodAnalysis,
-      affect,
+      affect, // now { valence, energy, tension, arousal }
       ...lightState(derived),
     },
     goal,
     goalLabel: goalLabel(goal),
+    nextActivity: cls.activity,
+    activityLabel: ACTIVITY_LABELS[cls.activity] || 'Keep the vibe',
+    strategy, // { kind: 'align'|'compensate', note, phase }
+    dose, // { tracks, minutes }
     mission: { id: mission, label: missionLabel(mission), reason: reasoning },
-    arc: { goal, start: arc.start, target: arc.target },
+    arc: { goal, start: arc.start, target: arc.target, direction: arc.arcDirection },
     targetProfile,
     dj,
     playlist,
     recommendation: playlist[0] || null, // back-compat
     backups: playlist.slice(1, 4), // back-compat
+    safety: { volumeNotice: volumeNotice(), instrumentalPreferred: guard.instrumentalPreferred },
     signalsReferenced: derived.signalsReferenced,
     ai: {
       enabled: aiEnabled(),
@@ -191,7 +270,7 @@ const lightState = (d) => ({
   contextRisk: d.contextRisk,
 });
 
-const stripInternal = ({ profile, arcFit, arcSlot, matchScore, ...card }) => ({
+const stripInternal = ({ profile, arcFit, arcSlot, matchScore, genres, ...card }) => ({
   ...card,
   matchScore: matchScore || arcFit || 70,
 });
@@ -200,6 +279,7 @@ function profileFrom(t) {
   return {
     energy: t.energy,
     valence: t.valence,
+    tension: t.tension,
     tempoBpm: [Math.round(t.tempoBpm - 12), Math.round(t.tempoBpm + 12)],
     acousticness: t.acousticness,
     danceability: t.danceability,
@@ -211,6 +291,7 @@ function normalizeAiProfile(p) {
   return {
     energy: clamp01(p.energy),
     valence: clamp01(p.valence),
+    tension: p.tension != null ? clamp01(p.tension) : undefined,
     tempoBpm: Math.round(p.tempoBpm || 100),
     acousticness: clamp01(p.acousticness),
     danceability: clamp01(p.danceability),
@@ -228,6 +309,7 @@ function applyActionToArc(arc, action) {
     target: {
       ...t,
       energy: clamp01(t.energy + dir * 0.15),
+      tension: t.tension != null ? clamp01(t.tension - dir * 0.05) : t.tension,
       valence: clamp01(t.valence + dir * 0.05),
       tempoBpm: Math.round(t.tempoBpm + dir * 14),
       acousticness: clamp01(t.acousticness - dir * 0.1),

@@ -31,7 +31,8 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-const length = Math.min(20, Math.max(4, parseInt(args.length, 10) || 12));
+// length is OPTIONAL — omit it and the arc is dosed to the time until the next event.
+const length = args.length ? Math.min(20, Math.max(4, parseInt(args.length, 10) || 12)) : undefined;
 const name = typeof args.name === 'string' ? args.name : 'You';
 const action = typeof args.action === 'string' ? args.action : 'play_something';
 
@@ -43,17 +44,22 @@ const { context: ctx, sources } = await assembleLiveContext({ userName: name });
 const result = await recommendPlaylist(ctx, { length, action });
 const d = describeBiometrics(ctx);
 
+const af = result.state.affect;
 console.log(`  ${ctx.timeOfDay} in ${ctx.location} · ${ctx.weather}`);
-console.log(`  Next up: ${ctx.calendar}`);
+console.log(`  Next up: ${ctx.calendar}  →  priming for ${result.activityLabel.toLowerCase()}`);
 console.log(
   `  Body: energy ${ctx.energyLevel} (${d.energyBand}) · stress ${ctx.stressLevel} (${d.stressBand}) · ` +
     `sleep ${ctx.sleepQuality} (${d.sleepBand}) · HRV ${ctx.hrv}ms · RHR ${ctx.restingHr}bpm`
 );
 console.log(
-  `  Read: ${result.goalLabel}  (valence ${result.state.affect.valence} · arousal ${result.state.affect.arousal})`
+  `  Read: ${result.goalLabel}  (valence ${af.valence} · energy ${af.energy} · tension ${af.tension})` +
+    `  ·  ${result.strategy.kind} (${result.strategy.note})`
 );
-console.log(`  Arc:  ${result.arc.start.tempoBpm}→${result.arc.target.tempoBpm} BPM, ` +
-  `energy ${result.arc.start.energy}→${result.arc.target.energy}`);
+console.log(
+  `  Arc:  ${result.arc.start.tempoBpm}→${result.arc.target.tempoBpm} BPM, ` +
+    `energy ${result.arc.start.energy}→${result.arc.target.energy}  ·  ` +
+    `dosed to ${result.dose.tracks} tracks (~${result.dose.minutes} min)`
+);
 console.log(`\n  🎙️  ${result.dj.line}\n`);
 
 console.log(`  Playlist (${result.playlist.length} tracks · ${result.ai.mode}):`);

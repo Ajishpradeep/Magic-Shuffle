@@ -1,29 +1,45 @@
 /**
- * Order a pool of candidate tracks into an ISO-principle ARC.
+ * Order a pool of candidate tracks into an ISO-principle ARC, and dose the arc length.
  *
- * Given a start profile (near the listener's current state) and a target profile
- * (the regulation goal), we interpolate a per-slot target across the playlist and
- * greedily place the best-matching, not-yet-used candidate in each slot. The
- * result climbs/descends smoothly in tempo & energy instead of jumping — the
- * therapeutic point of the iso-principle.
+ * Given a start profile (near the listener's current state) and a target profile (the
+ * regulation goal), we interpolate a per-slot target across the playlist and greedily place
+ * the best-matching, not-yet-used candidate in each slot. The result climbs/descends smoothly
+ * in tempo & energy instead of jumping — the therapeutic point of the ISO-principle.
+ *
+ * Feature weighting follows source 02 §9: arousal levers (energy, tempo, and tension) carry the
+ * most weight; valence/mode moderate; danceability is deliberately down-weighted (poor match to
+ * human ratings). Since this app can't read Spotify audio-features (HANDOFF §4), AI cards carry
+ * an estimated `tension`; catalog cards don't, so tension is scored only when both sides have it.
  *
  * Candidate shape: each item must carry a normalized `.profile`:
- *   { energy, valence, acousticness, danceability, vocalDensity } in 0..1, tempoBpm real.
+ *   { energy, valence, acousticness, danceability, vocalDensity, [tension] } 0..1, tempoBpm real.
  */
 import { arcProfileAt } from './affect.js';
 
-// How much each dimension matters when matching a track to a slot target.
-const W = { energy: 0.3, tempo: 0.25, valence: 0.2, acousticness: 0.15, vocalDensity: 0.1 };
+// Per-dimension weights (source 02 §9). Tempo & energy & tension dominate (arousal); valence
+// moderate; acousticness/vocalDensity supporting; danceability intentionally excluded.
+const W = { energy: 0.28, tempo: 0.24, tension: 0.14, valence: 0.16, acousticness: 0.1, vocalDensity: 0.08 };
 
 function distance(profile, slot) {
-  const dTempo = Math.min(Math.abs((profile.tempoBpm || 100) - slot.tempoBpm) / 80, 1);
-  return (
-    W.energy * Math.abs(profile.energy - slot.energy) +
-    W.tempo * dTempo +
-    W.valence * Math.abs(profile.valence - slot.valence) +
-    W.acousticness * Math.abs((profile.acousticness ?? 0.5) - slot.acousticness) +
-    W.vocalDensity * Math.abs((profile.vocalDensity ?? 0.5) - slot.vocalDensity)
-  );
+  let sum = 0;
+  let used = 0;
+  const add = (w, diff) => {
+    sum += w * diff;
+    used += w;
+  };
+
+  add(W.energy, Math.abs(profile.energy - slot.energy));
+  add(W.tempo, Math.min(Math.abs((profile.tempoBpm || 100) - slot.tempoBpm) / 80, 1));
+  add(W.valence, Math.abs(profile.valence - slot.valence));
+  add(W.acousticness, Math.abs((profile.acousticness ?? 0.5) - slot.acousticness));
+  add(W.vocalDensity, Math.abs((profile.vocalDensity ?? 0.5) - slot.vocalDensity));
+  // Tension only when the candidate actually estimates it (AI cards), to avoid penalising the
+  // catalog (which has no tension dimension) with a guessed value.
+  if (profile.tension != null && slot.tension != null) {
+    add(W.tension, Math.abs(profile.tension - slot.tension));
+  }
+
+  return used ? sum / used : 1; // normalise by weights actually used
 }
 
 /**
@@ -37,8 +53,10 @@ export function buildArc(candidates, arc, length) {
   const n = Math.min(length, pool.length);
   if (!n) return [];
 
+  // Pass 1 — SELECT the n tracks that best cover the arc's slot targets (greedy per slot).
+  // This gets good coverage of the whole start→target range, including its scarce extremes.
   const used = new Set();
-  const ordered = [];
+  const selected = [];
   for (let i = 0; i < n; i++) {
     const slot = arcProfileAt(arc, i, n);
     let best = -1;
@@ -52,9 +70,48 @@ export function buildArc(candidates, arc, length) {
       }
     }
     used.add(best);
-    ordered.push({ ...pool[best], arcFit: Math.round((1 - Math.min(bestD, 1)) * 100), arcSlot: i });
+    selected.push({ ...pool[best], arcFit: Math.round((1 - Math.min(bestD, 1)) * 100) });
   }
-  return ordered;
+
+  // Pass 2 — ORDER the selected tracks monotonically along the arc, so tempo/energy ramp
+  // smoothly start→target instead of zig-zagging (the therapeutic point of the ISO-principle).
+  // Each track is projected onto the start→target line (0 = current state, 1 = goal).
+  selected.sort((a, b) => arcParam(a.profile, arc) - arcParam(b.profile, arc));
+  return selected.map((t, i) => ({ ...t, arcSlot: i }));
+}
+
+/** Position of a track along the arc: 0 ≈ the start (current) profile, 1 ≈ the target. */
+function arcParam(profile, arc) {
+  const proj = (a, b, x) => (b === a ? 0.5 : (x - a) / (b - a));
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const e = clamp01(proj(arc.start.energy, arc.target.energy, profile.energy));
+  const t = clamp01(proj(arc.start.tempoBpm, arc.target.tempoBpm, profile.tempoBpm || 100));
+  return 0.5 * e + 0.5 * t;
+}
+
+// Dosage facts (source 03 §8a / 05 §2): ~3.5 min per track; calming ≤30 min; sleep 25–60 (~36).
+const MINUTES_PER_TRACK = 3.5;
+const DOSE_MIN_TRACKS = 4;
+const DOSE_MAX_TRACKS = 20;
+
+/**
+ * Dose the playlist length to the time available before the next event, bounded by the
+ * activity's evidence-based session length. A workout in 10 min → short punchy primer; bedtime
+ * in 40 min → long decelerating arc. Falls back to `fallback` when nothing is timed.
+ * @param {number|null} minutesUntil minutes until the next event (null = untimed)
+ * @param {number} doseMinutes the activity's nominal session length
+ * @param {number} [fallback=12] default track count when no timed event
+ * @returns {{ tracks:number, minutes:number }}
+ */
+export function doseLength(minutesUntil, doseMinutes, fallback = 12) {
+  if (minutesUntil == null || !(minutesUntil > 0)) {
+    const tracks = Math.max(DOSE_MIN_TRACKS, Math.min(DOSE_MAX_TRACKS, fallback));
+    return { tracks, minutes: Math.round(tracks * MINUTES_PER_TRACK) };
+  }
+  // Use the smaller of "time until the event" and "the activity's ideal session length".
+  const minutes = Math.min(minutesUntil, doseMinutes || fallback * MINUTES_PER_TRACK);
+  const tracks = Math.max(DOSE_MIN_TRACKS, Math.min(DOSE_MAX_TRACKS, Math.round(minutes / MINUTES_PER_TRACK)));
+  return { tracks, minutes: Math.round(tracks * MINUTES_PER_TRACK) };
 }
 
 /** Normalize a 1..5 catalog track into the 0..1 profile buildArc expects. */

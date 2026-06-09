@@ -5,13 +5,15 @@
  * + calendar  (Google, real → mock fallback)  +  time of day (system clock)
  * + location  (IP-detected)
  *
- * Returns the same context shape the recommendation engine already consumes, so
- * deriveListenerState / scoring / the AI planner all work unchanged.
+ * Returns the same context shape the recommendation engine already consumes, PLUS the
+ * structured `nextEvent` + classified `nextActivity` that drive the next-activity targeting
+ * (README §5). The legacy `calendar` string is kept for back-compat and the DJ line.
  */
 import { getBiometrics, biometricProvider } from '../integrations/biometrics.js';
 import { getWeather } from '../integrations/weather.js';
 import { resolveLocation } from '../integrations/geolocation.js';
-import { getCalendarSummary, calendarConfigured } from '../integrations/googleCalendar.js';
+import { getUpcomingEvents, calendarConfigured } from '../integrations/googleCalendar.js';
+import { classifyNextActivity } from '../lib/activityClassifier.js';
 
 /** Map the current hour to the engine's timeOfDay vocabulary. */
 export function currentTimeOfDay(d = new Date()) {
@@ -24,22 +26,34 @@ export function currentTimeOfDay(d = new Date()) {
   return 'Night';
 }
 
-/** Best-effort activity inference from time + biometrics (purely for context flavor). */
-function inferActivity(timeOfDay, bio) {
-  if (/night/i.test(timeOfDay)) return 'wind_down';
-  if (/early morning/i.test(timeOfDay)) return 'waking';
-  if (bio.steps >= 12000) return 'workout';
-  return 'general';
+/** One-line "Pitch practice at 10:00 AM" from a structured event. */
+function eventLine(e) {
+  if (!e) return null;
+  if (e.allDay || !e.start) return e.summary;
+  const time = e.start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `${e.summary} at ${time}`;
 }
 
-/** Pick a plausible mock calendar line when no real calendar is connected. */
-function mockCalendarLine(timeOfDay) {
+/** Mock next-event when no real calendar is connected — keeps next-activity targeting alive. */
+function mockNextEvent(timeOfDay) {
   const t = timeOfDay.toLowerCase();
-  if (t.includes('early morning')) return 'Day ahead — first block at 10:00 AM';
-  if (t.includes('morning')) return 'Focus block this morning';
-  if (t.includes('afternoon')) return 'Meetings this afternoon';
-  if (t.includes('evening')) return 'Evening — winding down';
-  return 'No plans — open evening';
+  if (t.includes('early morning')) return { summary: 'Morning focus block', allDay: false, mock: true };
+  if (t.includes('morning')) return { summary: 'Deep work session', allDay: false, mock: true };
+  if (t.includes('afternoon')) return { summary: 'Team meeting', allDay: false, mock: true };
+  if (t.includes('evening')) return { summary: 'Evening wind-down', allDay: false, mock: true };
+  return { summary: 'Bedtime soon', allDay: false, mock: true };
+}
+
+/** Structured nextEvent (with minutesUntil) for the engine + UI. */
+function toNextEvent(e) {
+  if (!e) return null;
+  const minutesUntil = e.start instanceof Date ? Math.round((e.start.getTime() - Date.now()) / 60000) : null;
+  return {
+    summary: e.summary,
+    startISO: e.start instanceof Date ? e.start.toISOString() : null,
+    minutesUntil,
+    allDay: Boolean(e.allDay),
+  };
 }
 
 /**
@@ -53,22 +67,27 @@ export async function assembleLiveContext(opts = {}) {
   const timeOfDay = currentTimeOfDay();
 
   // Fetch the independent signals in parallel.
-  const [location, bio, calSummary] = await Promise.all([
+  const [location, bio, events] = await Promise.all([
     resolveLocation(),
     getBiometrics({ timeOfDay, ...biometricOpts }),
-    getCalendarSummary(),
+    getUpcomingEvents({ max: 1 }),
   ]);
   const weather = await getWeather(location);
 
-  const calendar = calSummary || mockCalendarLine(timeOfDay);
-  const calendarSource = calSummary ? 'google' : calendarConfigured() ? 'mock_not_connected' : 'mock_unconfigured';
+  const realEvent = events[0] || null;
+  const event = realEvent || mockNextEvent(timeOfDay);
+  const nextEvent = toNextEvent(event);
+  const calendar = eventLine(event);
+  const calendarSource = realEvent ? 'google' : calendarConfigured() ? 'mock_not_connected' : 'mock_unconfigured';
+
+  const cls = classifyNextActivity(nextEvent, timeOfDay);
 
   const context = {
     // identity / when / where
     userName,
     timeOfDay,
     location: location.city,
-    activity: inferActivity(timeOfDay, bio),
+    activity: cls.activity !== 'none' ? cls.activity : inferActivity(timeOfDay, bio),
     // biometrics (0–100 + raw vitals)
     energyLevel: bio.energyLevel,
     sleepQuality: bio.sleepQuality,
@@ -83,8 +102,11 @@ export async function assembleLiveContext(opts = {}) {
     weather: weather.weather,
     rainChance: weather.rainChance,
     tempC: weather.tempC,
-    // calendar
+    // calendar — string (back-compat) + structured next-activity (new)
     calendar,
+    nextEvent,
+    nextActivity: cls.activity,
+    activityConfidence: cls.confidence,
   };
 
   return {
@@ -96,4 +118,12 @@ export async function assembleLiveContext(opts = {}) {
       location: location.source,
     },
   };
+}
+
+/** Fallback activity from time + biometrics when the calendar says nothing useful. */
+function inferActivity(timeOfDay, bio) {
+  if (/night/i.test(timeOfDay)) return 'wind_down';
+  if (/early morning/i.test(timeOfDay)) return 'waking';
+  if (bio.steps >= 12000) return 'workout';
+  return 'general';
 }

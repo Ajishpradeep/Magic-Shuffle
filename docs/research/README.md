@@ -234,9 +234,14 @@ product on the right side of the FDA general-wellness boundary.
 
 ## 7. How this changes the project (research-driven implications)
 
-*Implementation is a separate session — this is the spec, not code.* The current engine
-(`affect.js`, `isoPlaylist.js`, the OpenAI prompt) already does circumplex + ISO + a single
-goal. The research points to these upgrades:
+> **Status: IMPLEMENTED (P0–P5).** All seven implications below are now live in the engine —
+> two-axis affect, next-activity targeting, circadian/weather modulation, prompt rewrite, time-
+> dosing, and safety guardrails. See `HANDOFF.md` §9 and `docs/research-integration-plan.md`.
+> Only #7 (validation/personalization) is deferred to the optional P6. The notes below remain
+> as the rationale for each change.
+
+The original engine (`affect.js`, `isoPlaylist.js`, the OpenAI prompt) did circumplex + ISO +
+a single goal. The research pointed to these upgrades, now built:
 
 1. **Split arousal into energy + tension (Thayer).** Today the goal is essentially one arousal
    axis. Model *energy* and *tension* separately so "calm an anxious-but-tired user" and "energize

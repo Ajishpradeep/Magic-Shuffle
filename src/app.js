@@ -11,7 +11,7 @@ import { MISSIONS } from './lib/missions.js';
 import { FEEDBACK_ACTIONS } from './lib/feedback.js';
 import { recommend, recommendPlaylist } from './services/recommend.js';
 import { assembleLiveContext } from './services/buildContext.js';
-import { aiEnabled, aiModel } from './integrations/openai.js';
+import { aiEnabled, aiModel, aiProvider } from './integrations/openai.js';
 import { spotifyEnabled } from './integrations/spotifyClient.js';
 import { weatherEnabled } from './integrations/weather.js';
 import { biometricProvider } from './integrations/biometrics.js';
@@ -40,6 +40,17 @@ const CORS_ORIGINS = (process.env.CORS_ORIGINS || '')
   .map((x) => x.trim())
   .filter(Boolean);
 
+// Research goal vocabulary the engine now speaks (replaces the legacy mission taxonomy).
+const GOALS = ['calm_down', 'energize', 'wind_down', 'focus', 'maintain'];
+const ACTIVITIES = ['workout', 'focus', 'sleep', 'wake', 'social', 'commute', 'recovery', 'none'];
+
+/** Parse a comma-separated or repeated query param into a string[]. */
+function parseList(v) {
+  if (v == null) return [];
+  if (Array.isArray(v)) return v.flatMap((x) => String(x).split(','));
+  return String(v).split(',').map((x) => x.trim()).filter(Boolean);
+}
+
 export function createApp() {
   const app = express();
   app.use(express.json());
@@ -53,6 +64,7 @@ export function createApp() {
       version: 1,
       mode: aiEnabled() && spotifyEnabled() ? 'ai-grounded' : 'deterministic',
       aiEnabled: aiEnabled(),
+      aiProvider: aiProvider(),
       aiModel: aiModel(),
       spotifyGrounding: spotifyEnabled(),
       playback: playbackConfigured(),
@@ -61,7 +73,19 @@ export function createApp() {
         calendar: calendarConfigured() ? 'google-oauth' : 'mock',
         biometrics: biometricProvider(),
       },
-      missions: Object.keys(MISSIONS),
+      // Research-grade engine: three affect axes, next-activity targeting, circadian/weather
+      // modulation, time-dosed arcs, and safety guardrails are all active.
+      model: {
+        affectAxes: ['valence', 'energy', 'tension'],
+        goals: GOALS,
+        activities: ACTIVITIES,
+        nextActivityTargeting: true,
+        circadianWeather: true,
+        timeDosedArc: true,
+        safetyGuardrails: true,
+      },
+      goals: GOALS,
+      missions: Object.keys(MISSIONS), // legacy, display only
       feedbackActions: FEEDBACK_ACTIONS,
       contexts: CONTEXTS.length,
       fallbackTracks: TRACKS.length,
@@ -74,8 +98,10 @@ export function createApp() {
     try {
       const { context, sources } = await assembleLiveContext({ userName: req.query.name || 'You' });
       const action = FEEDBACK_ACTIONS.includes(req.query.action) ? req.query.action : 'play_something';
-      const length = Math.min(20, Math.max(4, parseInt(req.query.length, 10) || 12));
-      const result = await recommendPlaylist(context, { action, length });
+      // length is OPTIONAL — when omitted, the arc is dosed to the time until the next event.
+      const length = req.query.length ? Math.min(20, Math.max(4, parseInt(req.query.length, 10) || 12)) : undefined;
+      const block = parseList(req.query.block);
+      const result = await recommendPlaylist(context, { action, length, block });
       res.json({ ...result, sources });
     } catch (e) {
       console.error('playlist error', e);
@@ -164,6 +190,8 @@ export function createApp() {
       const result = await recommend(ctx, {
         action,
         exclude: Array.isArray(body.exclude) ? body.exclude : [],
+        block: Array.isArray(body.block) ? body.block : [],
+        length: body.length != null ? body.length : undefined,
         lastArtist: body.lastArtist || null,
         currentMission: body.currentMission || null,
       });
